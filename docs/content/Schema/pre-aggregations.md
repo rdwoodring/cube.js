@@ -285,6 +285,14 @@ Original SQL pre-aggregation is the simplest type of pre-aggregation. As the
 name suggests, it persists the results of the SQL query of the cube in which it
 is defined.
 
+<!-- prettier-ignore-start -->
+[[warning |]]
+| Pre-aggregations of type `originalSql` should **only** be used when the
+| cube's `sql` is a complex query (i.e. nested, window functions and/or
+| multiple joins), and **only** for
+| [**internal** pre-aggregations][ref-caching-using-preaggs-internal].
+<!-- prettier-ignore-end -->
+
 For example, to pre-aggregate all completed orders, you could do the following:
 
 ```javascript
@@ -320,8 +328,8 @@ cube(`Companies`, {
 
   measures: {
     count: {
-      type: `count`
-    }
+      type: `count`,
+    },
   },
 
   dimensions: {
@@ -329,8 +337,8 @@ cube(`Companies`, {
       sql: `name`,
       type: `string`,
       primaryKey: true,
-      shown: true
-    }
+      shown: true,
+    },
   },
 
   preAggregations: {
@@ -354,8 +362,8 @@ cube('Users', {
   },
   measures: {
     count: {
-      type: `count`
-    }
+      type: `count`,
+    },
   },
   dimensions: {
     id: {
@@ -470,62 +478,31 @@ cube(`Orders`, {
 The `incremental: true` flag generates a special `refreshKey` SQL query which
 triggers a refresh for partitions where the end date lies within the
 `updateWindow` from the current time. In the provided example, it will refresh
-today's and the last 7 days of partitions once a day. Partitions before the `7 day`
-interval **will not** be refreshed once they are built unless the rollup SQL is
-changed.
+today's and the last 7 days of partitions once a day. Partitions before the
+`7 day` interval **will not** be refreshed once they are built unless the rollup
+SQL is changed.
 
-Partition tables are refreshed as a whole.
-When new partition table is available it replaces the old one.
-Old partition tables are collected by [Garbage Collection][ref-garbage-collection].
-Append is never used to add new rows to the existing tables.
-
-An original SQL pre-aggregation can also be used with time partitioning and
-incremental `refreshKey`. It requires using `FILTER_PARAMS` inside the Cube's
-`sql` property.
-
-Below you can find an example of the partitioned `originalSql` pre-aggregation.
-
-```javascript
-cube(`Orders`, {
-  sql: `select * from visitors WHERE ${FILTER_PARAMS.visitors.created_at.filter(
-    'created_at'
-  )}`,
-
-  preAggregations: {
-    main: {
-      type: `originalSql`,
-      timeDimensionReference: created_at,
-      partitionGranularity: `month`,
-      refreshKey: {
-        every: `1 day`,
-        incremental: true,
-        updateWindow: `7 day`,
-      },
-    },
-  },
-
-  dimensions: {
-    id: {
-      type: 'number',
-      sql: 'id',
-      primaryKey: true,
-    },
-    created_at: {
-      type: 'time',
-      sql: 'created_at',
-    },
-  },
-});
-```
+Partition tables are refreshed as a whole. When a new partition table is available,
+it replaces the old one. Old partition tables are collected by [Garbage
+Collection][ref-garbage-collection]. Append is never used to add new rows to the
+existing tables.
 
 ## useOriginalSqlPreAggregations
 
 Cube.js supports multi-stage pre-aggregations by reusing original SQL
 pre-aggregations in rollups through the `useOriginalSqlPreAggregations`
 property. It is helpful in cases where you want to re-use a heavy SQL query
-calculation in multiple rollups. Without `useOriginalSqlPreAggregations` set to
-`true`, Cube.js will always re-execute all underlying SQL calculations every
-time it builds new rollup tables.
+calculation in multiple `rollup` pre-aggregations. Without
+`useOriginalSqlPreAggregations` enabled, Cube.js will always re-execute all
+underlying SQL calculations every time it builds new rollup tables.
+
+<!-- prettier-ignore-start -->
+[[warning |]]
+| `originalSql` pre-aggregations **must only** be used when [storing
+| pre-aggregations on the source database][ref-caching-using-preaggs-internal].
+| This also means that `originalSql` pre-aggregations require
+| [`readOnly: false`][ref-caching-readonly].
+<!-- prettier-ignore-end -->
 
 ```javascript
 cube(`Orders`, {
@@ -692,6 +669,9 @@ cube(`Orders`, {
 });
 ```
 
+[ref-caching-readonly]: /caching/using-pre-aggregations#read-only-data-source
+[ref-caching-using-preaggs-internal]:
+  /caching/using-pre-aggregations#pre-aggregations-storage
 [ref-connect-db-ext]:
   /connecting-to-the-database#external-pre-aggregations-database
 [ref-config-driverfactory]: /config/#options-reference-driver-factory
