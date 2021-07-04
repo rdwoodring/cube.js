@@ -2149,11 +2149,6 @@ export class BaseQuery {
                 refreshKey,
                 { window: preAggregation.refreshKey.updateWindow, refreshKeyQuery }
               );
-              renewalThreshold = this.incrementalRefreshKeyRenewalThreshold(
-                preAggregationQueryForSql,
-                renewalThreshold,
-                preAggregation.refreshKey.updateWindow
-              );
             }
           }
 
@@ -2162,9 +2157,10 @@ export class BaseQuery {
               refreshKeyQuery.paramAllocator.buildSqlAndParams(this.refreshKeySelect(refreshKey)).concat({
                 external: refreshKeyExternal,
                 renewalThreshold,
+                incremental: preAggregation.refreshKey.incremental,
                 updateWindowSeconds: preAggregation.refreshKey.updateWindow &&
                   this.parseSecondDuration(preAggregation.refreshKey.updateWindow),
-                renewalThresholdOutsideUpdateWindow: preAggregation.refreshKey.updateWindow &&
+                renewalThresholdOutsideUpdateWindow: preAggregation.refreshKey.incremental &&
                   24 * 60 * 60
               })
             ];
