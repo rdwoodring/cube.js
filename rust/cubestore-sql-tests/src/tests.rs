@@ -84,6 +84,7 @@ pub fn sql_tests() -> Vec<(&'static str, TestFn)> {
         t("rolling_window_join", rolling_window_join),
         t("decimal_index", decimal_index),
         t("float_index", float_index),
+        t("date_add", date_add),
         t("now", now),
         t("dump", dump),
     ];
@@ -2658,6 +2659,30 @@ async fn float_index(service: Box<dyn SqlClient>) {
             })
             .collect_vec()
     }
+}
+
+async fn date_add(service: Box<dyn SqlClient>) {
+    let r = service
+        .exec_query(
+            "SELECT
+            DATE_ADD(CAST('2021-01-01T00:00:00Z' as TIMESTAMP), INTERVAL '1 second'),\
+            DATE_ADD(CAST('2021-01-01T00:00:00Z' as TIMESTAMP), INTERVAL '1 minute'),\
+            DATE_ADD(CAST('2021-01-01T00:00:00Z' as TIMESTAMP), INTERVAL '1 hour'),\
+            DATE_ADD(CAST('2021-01-01T00:00:00Z' as TIMESTAMP), INTERVAL '1 day')\
+        ",
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(
+        to_rows(&r),
+        vec![vec![
+            TableValue::Timestamp(timestamp_from_string("2021-01-01T00:00:01Z").unwrap()),
+            TableValue::Timestamp(timestamp_from_string("2021-01-01T00:01:00Z").unwrap()),
+            TableValue::Timestamp(timestamp_from_string("2021-01-01T01:00:00Z").unwrap())
+            TableValue::Timestamp(timestamp_from_string("2021-01-02T00:00:00Z").unwrap())
+        ],]
+    );
 }
 
 async fn now(service: Box<dyn SqlClient>) {
