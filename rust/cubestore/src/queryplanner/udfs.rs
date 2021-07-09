@@ -6,7 +6,7 @@ use arrow::array::{
     Array, BinaryArray, TimestampNanosecondArray, TimestampNanosecondBuilder, UInt64Builder,
 };
 use arrow::datatypes::{DataType, IntervalUnit, TimeUnit, TimestampNanosecondType};
-use chrono::{DateTime, Duration, NaiveDate, TimeZone, Utc};
+use chrono::{DateTime, Datelike, Duration, NaiveDate, TimeZone, Utc};
 use datafusion::error::DataFusionError;
 use datafusion::physical_plan::functions::Signature;
 use datafusion::physical_plan::udaf::AggregateUDF;
@@ -192,10 +192,7 @@ impl CubeScalarUDF for UnixTimestamp {
 struct DateAdd {}
 impl DateAdd {
     fn signature() -> Signature {
-        Signature::Exact(vec![
-            DataType::Timestamp(TimeUnit::Nanosecond, None),
-            DataType::Interval(IntervalUnit::DayTime),
-        ])
+        Signature::Any(2)
     }
 }
 impl CubeScalarUDF for DateAdd {
@@ -222,22 +219,45 @@ impl CubeScalarUDF for DateAdd {
                     ));
                 }
 
-                let date_scalar =
-                    if let ColumnarValue::Scalar(ScalarValue::TimestampNanosecond(Some(v))) =
-                        inputs[0]
-                    {
-                        v
-                    } else {
+                let mut result_date = match &inputs[0] {
+                    ColumnarValue::Scalar(scalar) => match scalar {
+                        ScalarValue::TimestampNanosecond(Some(v)) => Utc.timestamp_nanos(*v),
+                        ScalarValue::TimestampMillisecond(Some(v)) => Utc.timestamp_millis(*v),
+                        ScalarValue::TimestampSecond(Some(v)) => Utc.timestamp(*v, 0),
+                        _ => {
+                            return Err(DataFusionError::Execution(
+                                "First argument of `DATE_PART` must be non-null scalar Timestamp"
+                                    .to_string(),
+                            ));
+                        }
+                    },
+                    _ => {
                         return Err(DataFusionError::Execution(
-                        "First argument of `DATE_PART` must be non-null scalar TimestampNanosecond"
-                            .to_string(),
-                    ));
-                    };
-
-                let mut result_date = Utc.timestamp_nanos(date_scalar);
+                            "First argument of `DATE_PART` must be non-null scalar Timestamp"
+                                .to_string(),
+                        ));
+                    }
+                };
 
                 match &inputs[1] {
                     ColumnarValue::Scalar(scalar) => match scalar {
+                        ScalarValue::IntervalYearMonth(Some(v)) => {
+                            let years_to_add = (*v as f64 / 12_f64).floor() as i32;
+                            let months_to_add = (*v - (years_to_add * 12)) as u32;
+
+                            let mut year = result_date.year() + years_to_add;
+                            let mut month = result_date.month();
+
+                            if month + months_to_add > 12 {
+                                year += 1;
+                                month = (month + months_to_add) - 12;
+                            } else {
+                                month += months_to_add;
+                            }
+
+                            result_date = result_date.with_year(year).unwrap();
+                            result_date = result_date.with_month(month).unwrap();
+                        }
                         ScalarValue::IntervalDayTime(Some(v)) => {
                             let days_parts: i64 = (((*v as u64) & 0xFFFFFFFF00000000) >> 32) as i64;
                             let milliseconds_part: i64 = ((*v as u64) & 0xFFFFFFFF) as i64;
